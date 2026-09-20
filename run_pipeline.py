@@ -49,9 +49,8 @@ def run(mode):
     import site_selection
     step("Output: site selection", site_selection.run)
 
-    # add more output modules here as your teammates finish them, e.g.:
-    # import policing
-    # step("Output: policing priority", policing.run)
+    import policing_priority
+    step("Output: policing priority", policing_priority.run)
     # import demand_forecast
     # step("Output: demand forecasting", demand_forecast.run)
 
