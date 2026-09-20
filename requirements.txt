@@ -2,6 +2,7 @@ earthengine-api
 numpy
 scipy
 matplotlib
+plotly
 folium
 pandas
 rasterio

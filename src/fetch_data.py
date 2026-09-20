@@ -79,8 +79,7 @@ def fetch_real_data():
     import ee
     ee.Initialize(project="project-nightlight-analysis")
 
-    # TODO: replace with your actual region of interest [west, south, east, north]
-    region = ee.Geometry.Rectangle([12.851977, 80.140187, 13.235158, 80.332898])
+    region = ee.Geometry.Rectangle([80.138706, 12.850400, 80.336336, 13.236676])
 
     def get_year_image(year):
         collection = (

@@ -14,6 +14,7 @@ Usage:
 """
 
 import os
+import json
 import numpy as np
 import rasterio
 from rasterio.warp import reproject, Resampling
@@ -31,7 +32,9 @@ def load_band(path):
     georeferencing info (crs, transform) we need to align other rasters to it."""
     with rasterio.open(path) as src:
         array = src.read(1).astype("float64")
-        array = np.where(array < 0, 0, array)   # some rasters use negative = no-data
+        if src.nodata is not None:
+            array = np.where(array == src.nodata, 0, array)
+        array = np.where(np.isnan(array), 0, array)
         profile = src.profile
     return array, profile
 
@@ -49,11 +52,13 @@ def reproject_to_match(source_path, reference_profile):
             destination=destination,
             src_transform=src.transform,
             src_crs=src.crs,
+            src_nodata=src.nodata,
             dst_transform=reference_profile["transform"],
             dst_crs=reference_profile["crs"],
+            dst_nodata=0,
             resampling=Resampling.bilinear,
         )
-    destination = np.where(destination < 0, 0, destination)
+    destination = np.where(np.isnan(destination), 0, destination)
     return destination
 
 
@@ -78,6 +83,18 @@ def run():
     np.save(os.path.join(DATA_DIR, "brightness_2019.npy"), brightness_2019)
     np.save(os.path.join(DATA_DIR, "brightness_2024.npy"), brightness_2024)
     np.save(os.path.join(DATA_DIR, "population.npy"), population)
+
+    # save the geographic bounds so other scripts can translate grid
+    # positions (rows/cols) back into real latitude/longitude
+    bounds = rasterio.transform.array_bounds(
+        ref_profile["height"], ref_profile["width"], ref_profile["transform"]
+    )
+    bounds_info = {
+        "west": bounds[0], "south": bounds[1], "east": bounds[2], "north": bounds[3],
+        "height": ref_profile["height"], "width": ref_profile["width"],
+    }
+    with open(os.path.join(DATA_DIR, "grid_bounds.json"), "w") as f:
+        json.dump(bounds_info, f, indent=2)
 
     print(f"Saved aligned .npy files to {os.path.abspath(DATA_DIR)}")
     print(f"Grid shape: {brightness_2019.shape}")
