@@ -53,8 +53,8 @@ def run(mode):
     import policing_priority
     step("Output: policing priority", policing_priority.run)
 
-    # import demand_forecast
-    # step("Output: demand forecasting", demand_forecast.run)
+    import demand_forecast
+    step("Output: demand forecasting", demand_forecast.run)
 
     import generate_map
     step("Dashboard: Chennai heatmap", generate_map.generate_chennai_dashboard)

@@ -8,24 +8,32 @@ from dashboard_components import (
     create_kpi_cards,
     create_distribution_chart,
     create_hotspots_ranking_chart,
-    create_quadrant_chart
+    create_quadrant_chart,
+    create_growth_trend_chart,
+    create_growth_heatmap,
+    create_policing_chart,
+    create_demand_forecast_chart
 )
 
 def generate_chennai_dashboard():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(base_dir, "..", "data")
-    
+
     score_path = os.path.join(data_dir, "combined_score.npy")
     bounds_path = os.path.join(data_dir, "grid_bounds.json")
-    
+    growth_path = os.path.join(data_dir, "growth_score.npy")
+    brightness_2019_path = os.path.join(data_dir, "brightness_2019.npy")
+    brightness_2024_path = os.path.join(data_dir, "brightness_2024.npy")
+    population_path = os.path.join(data_dir, "population.npy")
+
     if not os.path.exists(score_path):
-        print(f"Error: {score_path} not found. Run 'python create_mock_data.py' first.")
+        print(f"Error: {score_path} not found. Run 'python run_pipeline.py --real' (or --mock) first.")
         return
 
     # 1. Load data safely
     raw_score = np.load(score_path)
     clean_score = np.nan_to_num(raw_score, nan=0.0)
-    
+
     # Auto-scale if raw un-normalized values
     min_val, max_val = float(np.min(clean_score)), float(np.max(clean_score))
     if max_val > 1.0 or min_val < 0.0:
@@ -48,10 +56,10 @@ def generate_chennai_dashboard():
 
     lat_steps = np.linspace(max_lat, min_lat, rows)
     lon_steps = np.linspace(min_lon, max_lon, cols)
-    
+
     heat_data = []
     all_monitored_cells = []
-    
+
     for r in range(rows):
         for c in range(cols):
             score = float(combined_score[r, c])
@@ -65,13 +73,11 @@ def generate_chennai_dashboard():
                     'area': get_area_name(lat, lon)
                 })
 
-    # Sort all monitored cells by score descending
     all_monitored_cells.sort(key=lambda x: x['score'], reverse=True)
 
     center_lat = (min_lat + max_lat) / 2
     center_lon = (min_lon + max_lon) / 2
-    
-    # 2. Build Folium Map with default Street View & Control=False on overlays
+
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=11,
@@ -79,7 +85,6 @@ def generate_chennai_dashboard():
         zoom_control=True
     )
 
-    # Esri Street View Map (Detailed Streets, Roads & Highways) - DEFAULT VISIBLE
     folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
         attr="Esri World Street Map",
@@ -88,7 +93,6 @@ def generate_chennai_dashboard():
         show=True
     ).add_to(m)
 
-    # Esri Topo Base Layer
     folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
         attr="Esri World Topo Map",
@@ -97,7 +101,6 @@ def generate_chennai_dashboard():
         show=False
     ).add_to(m)
 
-    # Esri Dark Base Layer
     folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
         attr="Esri World Dark Canvas",
@@ -106,7 +109,6 @@ def generate_chennai_dashboard():
         show=False
     ).add_to(m)
 
-    # Thermal Satellite Heatmap Spectrum (control=False prevents macro_element!)
     HeatMap(
         heat_data,
         radius=24,
@@ -122,7 +124,6 @@ def generate_chennai_dashboard():
         control=False
     ).add_to(m)
 
-    # Monitored Region Bounding Box (control=False prevents macro_element!)
     folium.Rectangle(
         bounds=[[min_lat, min_lon], [max_lat, max_lon]],
         color="#2563EB",
@@ -133,7 +134,6 @@ def generate_chennai_dashboard():
         control=False
     ).add_to(m)
 
-    # Top Hotspot Pin Markers
     for idx, h in enumerate(all_monitored_cells[:15], 1):
         popup_html = f'''
         <div style="font-family: 'Inter', system-ui, sans-serif; font-size: 12px; color: #0F172A; padding: 4px;">
@@ -158,9 +158,8 @@ def generate_chennai_dashboard():
 
     folium.LayerControl(position="topright").add_to(m)
 
-    # Thermal Legend
     legend_html = '''
-    <div style="position: absolute; bottom: 24px; left: 20px; z-index: 1000; 
+    <div style="position: absolute; bottom: 24px; left: 20px; z-index: 1000;
                 background: rgba(15, 23, 42, 0.90); backdrop-filter: blur(8px);
                 border: 1px solid rgba(255,255,255,0.15); padding: 12px 16px; border-radius: 8px;
                 color: #F8FAFC; font-family: 'Inter', system-ui, sans-serif; font-size: 11px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); width: 200px;">
@@ -178,7 +177,6 @@ def generate_chennai_dashboard():
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
 
-    # PostMessage listener inside map iframe for smooth flyTo map pan & zoom without browser alerts
     postmessage_js = '''
     <script>
     window.addEventListener('message', function(event) {
@@ -187,12 +185,12 @@ def generate_chennai_dashboard():
             var lon = event.data.lon;
             var areaName = event.data.areaName;
             var score = event.data.score;
-            
+
             for (var key in window) {
                 if (key.startsWith('map_') && window[key] && typeof window[key].flyTo === 'function') {
                     var mapObj = window[key];
                     mapObj.flyTo([lat, lon], 14, { duration: 1.2 });
-                    
+
                     var popup = L.popup()
                         .setLatLng([lat, lon])
                         .setContent('<div style="font-family: system-ui, sans-serif; font-size: 12px; padding: 4px;"><strong style="color: #2563EB;">' + areaName + '</strong><br>Latitude: ' + lat.toFixed(4) + '°N, Longitude: ' + lon.toFixed(4) + '°E<br><span style="background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; padding: 2px 6px; border-radius: 4px; font-weight: bold; display: inline-block; margin-top: 4px;">Intensity Score: ' + score.toFixed(3) + '</span></div>')
@@ -214,7 +212,30 @@ def generate_chennai_dashboard():
     ranking_chart_html = create_hotspots_ranking_chart(combined_score, lat_steps, lon_steps)
     quadrant_chart_html = create_quadrant_chart(combined_score)
 
-    # Hotspots Data Table HTML covering ALL monitored grid cells across Chennai
+    # Growth trend + growth heatmap
+    if os.path.exists(brightness_2019_path) and os.path.exists(brightness_2024_path):
+        brightness_2019 = np.load(brightness_2019_path)
+        brightness_2024 = np.load(brightness_2024_path)
+        growth_trend_html = create_growth_trend_chart(brightness_2019, brightness_2024)
+    else:
+        brightness_2024 = None
+        growth_trend_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>brightness_2019.npy / brightness_2024.npy not found. Run the pipeline first.</p>"
+
+    if os.path.exists(growth_path):
+        growth_score = np.load(growth_path)
+        growth_heatmap_html = create_growth_heatmap(growth_score, lat_steps, lon_steps)
+        demand_forecast_html = create_demand_forecast_chart(growth_score)
+    else:
+        growth_heatmap_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>growth_score.npy not found. Run the pipeline first.</p>"
+        demand_forecast_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>growth_score.npy not found. Run the pipeline first.</p>"
+
+    # Policing priority (needs population + brightness_2024)
+    if os.path.exists(population_path) and brightness_2024 is not None:
+        population = np.load(population_path)
+        policing_html = create_policing_chart(population, brightness_2024)
+    else:
+        policing_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>population.npy / brightness_2024.npy not found. Run the pipeline first.</p>"
+
     table_rows_html = ""
     for idx, h in enumerate(all_monitored_cells, 1):
         status_badge = '<span class="badge-tag tag-red">CRITICAL</span>' if h['score'] >= 0.75 else ('<span class="badge-tag tag-amber">HIGH</span>' if h['score'] >= 0.40 else '<span class="badge-tag tag-blue">MODERATE</span>')
@@ -231,22 +252,19 @@ def generate_chennai_dashboard():
         </tr>
         '''
 
-    # Responsive Dashboard HTML Template
     dashboard_html = f'''<!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Night-Light Insights Platform | Enterprise Analytics</title>
-    
-    <!-- Google Fonts -->
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Plotly CDN -->
+
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    
+
     <style>
         :root {{
             --bg-body: #F8FAFC;
@@ -292,7 +310,6 @@ def generate_chennai_dashboard():
             line-height: 1.5;
         }}
 
-        /* Header Navigation */
         .navbar {{
             display: flex;
             justify-content: space-between;
@@ -380,7 +397,6 @@ def generate_chennai_dashboard():
             background: var(--bg-hover);
         }}
 
-        /* KPI Scorecards Grid */
         .kpi-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -464,7 +480,6 @@ def generate_chennai_dashboard():
         [data-theme="dark"] .badge-emerald {{ background: rgba(16, 185, 129, 0.2); color: #6EE7B7; }}
         [data-theme="dark"] .badge-red {{ background: rgba(239, 68, 68, 0.2); color: #FCA5A5; }}
 
-        /* Layout Grid */
         .dashboard-grid {{
             display: grid;
             grid-template-columns: 1.6fr 1fr;
@@ -517,7 +532,6 @@ def generate_chennai_dashboard():
             border: none;
         }}
 
-        /* Tabs */
         .tab-bar {{
             display: flex;
             gap: 4px;
@@ -526,15 +540,17 @@ def generate_chennai_dashboard():
             border-radius: 8px;
             border: 1px solid var(--border);
             margin-bottom: 16px;
+            flex-wrap: wrap;
         }}
 
         .tab-btn {{
             flex: 1;
-            padding: 7px 12px;
+            min-width: 90px;
+            padding: 7px 10px;
             background: transparent;
             border: none;
             color: var(--text-muted);
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             border-radius: 6px;
             cursor: pointer;
@@ -554,7 +570,6 @@ def generate_chennai_dashboard():
             display: block;
         }}
 
-        /* Table & Global Search */
         .table-responsive {{
             overflow-x: auto;
             border-radius: 8px;
@@ -661,7 +676,6 @@ def generate_chennai_dashboard():
             pointer-events: none;
         }}
 
-        /* Responsive Mobile Breakpoints */
         @media (max-width: 1024px) {{
             .dashboard-grid {{ grid-template-columns: 1fr; }}
             .map-wrapper {{ height: 440px; }}
@@ -687,7 +701,6 @@ def generate_chennai_dashboard():
 </head>
 <body>
 
-    <!-- Header Navbar -->
     <div class="navbar">
         <div class="brand">
             <div class="brand-icon">
@@ -709,13 +722,10 @@ def generate_chennai_dashboard():
         </div>
     </div>
 
-    <!-- Executive KPI Cards -->
     {kpi_html}
 
-    <!-- Main Grid Layout -->
     <div class="dashboard-grid">
-        
-        <!-- Left Panel: Interactive Thermal Heatmap -->
+
         <div class="panel" id="mapPanel">
             <div class="panel-header">
                 <div>
@@ -728,7 +738,6 @@ def generate_chennai_dashboard():
             </div>
         </div>
 
-        <!-- Right Panel: Multi-Tab Analytics -->
         <div class="panel">
             <div class="panel-header">
                 <div>
@@ -736,32 +745,48 @@ def generate_chennai_dashboard():
                     <div class="panel-sub">Regional data distribution</div>
                 </div>
             </div>
-            
+
             <div class="tab-bar">
                 <button class="tab-btn active" onclick="switchTab('distTab', this)">Distribution</button>
                 <button class="tab-btn" onclick="switchTab('rankTab', this)">Top Hotspots</button>
                 <button class="tab-btn" onclick="switchTab('sectorTab', this)">Sectors</button>
+                <button class="tab-btn" onclick="switchTab('growthTab', this)">Growth Trend</button>
+                <button class="tab-btn" onclick="switchTab('growthHeatTab', this)">Growth Map</button>
+                <button class="tab-btn" onclick="switchTab('policingTab', this)">Policing</button>
+                <button class="tab-btn" onclick="switchTab('demandTab', this)">Demand</button>
             </div>
 
-            <!-- Tab 1: Intensity Histogram -->
             <div id="distTab" class="tab-content active">
                 {dist_chart_html}
             </div>
 
-            <!-- Tab 2: Top Hotspots Ranking -->
             <div id="rankTab" class="tab-content">
                 {ranking_chart_html}
             </div>
 
-            <!-- Tab 3: Sector Breakdown -->
             <div id="sectorTab" class="tab-content">
                 {quadrant_chart_html}
+            </div>
+
+            <div id="growthTab" class="tab-content">
+                {growth_trend_html}
+            </div>
+
+            <div id="growthHeatTab" class="tab-content">
+                {growth_heatmap_html}
+            </div>
+
+            <div id="policingTab" class="tab-content">
+                {policing_html}
+            </div>
+
+            <div id="demandTab" class="tab-content">
+                {demand_forecast_html}
             </div>
         </div>
 
     </div>
 
-    <!-- Bottom Panel: Global Monitored Directory & Real-Time Search -->
     <div class="panel">
         <div class="panel-header">
             <div>
@@ -792,14 +817,13 @@ def generate_chennai_dashboard():
         </div>
     </div>
 
-    <!-- Interactive Script Engine -->
     <script>
         function toggleTheme() {{
             const html = document.documentElement;
             const current = html.getAttribute('data-theme');
             const next = current === 'dark' ? 'light' : 'dark';
             html.setAttribute('data-theme', next);
-            
+
             const btnText = document.getElementById('themeBtnText');
             btnText.textContent = next === 'light' ? 'Dark Mode' : 'Light Mode';
         }}
@@ -807,14 +831,13 @@ def generate_chennai_dashboard():
         function switchTab(tabId, btn) {{
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            
+
             document.getElementById(tabId).classList.add('active');
             btn.classList.add('active');
-            
+
             window.dispatchEvent(new Event('resize'));
         }}
 
-        // Real-Time Search Engine filtering ALL monitored cells
         function filterTable() {{
             const input = document.getElementById('globalSearchInput');
             const filter = input.value.trim().toUpperCase();
@@ -829,11 +852,11 @@ def generate_chennai_dashboard():
                     let txtRank = tdRank ? (tdRank.textContent || tdRank.innerText) : "";
                     let txtArea = tdArea ? (tdArea.textContent || tdArea.innerText) : "";
                     let txtCoords = tdCoords ? (tdCoords.textContent || tdCoords.innerText) : "";
-                    
+
                     if (filter === "") {{
                         tr[i].style.display = i <= 30 ? "" : "none";
                     }} else {{
-                        if (txtArea.toUpperCase().indexOf(filter) > -1 || 
+                        if (txtArea.toUpperCase().indexOf(filter) > -1 ||
                             txtCoords.toUpperCase().indexOf(filter) > -1 ||
                             txtRank.toUpperCase() === filter) {{
                             tr[i].style.display = "";
@@ -845,12 +868,9 @@ def generate_chennai_dashboard():
             }}
         }}
 
-        // Locate Zone: Pans & Zooms map directly without browser alerts!
         function locateZone(lat, lon, areaName, score) {{
-            // 1. Smooth scroll to map panel
             document.getElementById('mapPanel').scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-            
-            // 2. Send postMessage to Leaflet iframe map to flyTo location
+
             const iframe = document.querySelector('.map-wrapper iframe');
             if (iframe && iframe.contentWindow) {{
                 iframe.contentWindow.postMessage({{
@@ -870,7 +890,7 @@ def generate_chennai_dashboard():
     output_path = os.path.join(data_dir, "chennai_heatmap.html")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(dashboard_html)
-        
+
     print(f"SUCCESS: Dashboard generated at {output_path}")
 
 if __name__ == "__main__":
