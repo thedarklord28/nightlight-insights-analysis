@@ -16,6 +16,7 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src", "outputs"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "dashboard"))
 
 
 def step(name, fn):
@@ -51,13 +52,17 @@ def run(mode):
 
     import policing_priority
     step("Output: policing priority", policing_priority.run)
+
     # import demand_forecast
     # step("Output: demand forecasting", demand_forecast.run)
+
+    import generate_map
+    step("Dashboard: Chennai heatmap", generate_map.generate_chennai_dashboard)
 
     print(f"\n{'=' * 50}")
     print("PIPELINE COMPLETE")
     print("=" * 50)
-    print("Check the data\\ folder for .html charts and .npy score files.")
+    print("Check the data\\ folder for .html charts, .npy score files, and chennai_heatmap.html.")
 
 
 if __name__ == "__main__":
