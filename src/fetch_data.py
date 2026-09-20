@@ -68,16 +68,19 @@ def fetch_mock_data():
 
 def fetch_real_data():
     """
-    Pulls real VIIRS night-light data from Google Earth Engine.
-    Requires: pip install earthengine-api, then `earthengine authenticate` once.
+    Pulls real VIIRS night-light data from Google Earth Engine and kicks off
+    export tasks that send the images to your Google Drive as GeoTIFFs.
+
+    Requires: pip install earthengine-api, then a working
+    `python -c "import ee; ee.Authenticate()"` once.
     NOTE: population density here still needs a real source swapped in
-    (e.g. WorldPop download) -- this function only pulls night-lights for now.
+    (e.g. WorldPop download) -- this function only pulls night-lights.
     """
     import ee
-    ee.Initialize()
+    ee.Initialize(project="project-nightlight-analysis")
 
-    # TODO: replace with your actual region of interest
-    region = ee.Geometry.Rectangle([80.15, 12.85, 80.25, 12.95])
+    # TODO: replace with your actual region of interest [west, south, east, north]
+    region = ee.Geometry.Rectangle([12.851977, 80.140187, 13.235158, 80.332898])
 
     def get_year_image(year):
         collection = (
@@ -85,17 +88,46 @@ def fetch_real_data():
             .filterDate(f"{year}-01-01", f"{year}-12-31")
             .filterBounds(region)
         )
-        return collection.median().clip(region)
+        # avg_rad is the actual radiance band we care about
+        return collection.select("avg_rad").median().clip(region)
 
     img_2019 = get_year_image(2019)
     img_2024 = get_year_image(2024)
 
     print("Pulled Earth Engine images for 2019 and 2024.")
-    print("Next step: export these to Drive or download as GeoTIFF using")
-    print("ee.batch.Export.image.toDrive(...) -- see Earth Engine docs.")
-    print("Once downloaded, load them with rasterio in align.py instead of .npy files.")
+    print("Starting export tasks to your Google Drive...")
 
-    return img_2019, img_2024
+    task_2019 = ee.batch.Export.image.toDrive(
+        image=img_2019,
+        description="brightness_2019_export",
+        folder="nightlight-insights",   # creates/uses this folder in your Drive
+        fileNamePrefix="brightness_2019",
+        region=region,
+        scale=500,          # meters per pixel -- VIIRS native resolution is ~500m
+        crs="EPSG:4326",
+        maxPixels=1e9,
+    )
+    task_2024 = ee.batch.Export.image.toDrive(
+        image=img_2024,
+        description="brightness_2024_export",
+        folder="nightlight-insights",
+        fileNamePrefix="brightness_2024",
+        region=region,
+        scale=500,
+        crs="EPSG:4326",
+        maxPixels=1e9,
+    )
+
+    task_2019.start()
+    task_2024.start()
+
+    print("Export tasks started: brightness_2019_export, brightness_2024_export")
+    print("Check progress at https://code.earthengine.google.com under the 'Tasks' tab")
+    print("Once each task shows COMPLETED, find the .tif files in Google Drive")
+    print("under a folder named 'nightlight-insights', then download them into")
+    print("this project's data\\ folder.")
+
+    return task_2019, task_2024
 
 
 if __name__ == "__main__":
