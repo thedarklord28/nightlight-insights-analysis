@@ -402,31 +402,45 @@ def create_growth_heatmap(growth_score, lat_steps, lon_steps):
     return fig.to_html(full_html=False, include_plotlyjs=False, config={'displayModeBar': False, 'responsive': True})
 
 
-def _split_into_zones(grid: np.ndarray, zone_rows=4, zone_cols=4):
-    """Same zone-splitting logic used by site_selection.py / policing_priority.py,
-    duplicated here so dashboard_components.py doesn't need to import from src/outputs."""
+def _split_into_zones(grid: np.ndarray, lat_steps=None, lon_steps=None, zone_rows=4, zone_cols=4):
+    """Same zone-splitting logic used by site_selection.py / policing_priority.py.
+    If lat_steps/lon_steps are given, each zone is labeled with its real
+    locality name (via get_area_name) instead of an abstract 'Zone A1' code."""
     h, w = grid.shape
     row_step = max(h // zone_rows, 1)
     col_step = max(w // zone_cols, 1)
-    zones = {}
     letters = "ABCD"
+    zones = {}
     for i in range(zone_rows):
         for j in range(zone_cols):
-            block = grid[i * row_step:(i + 1) * row_step, j * col_step:(j + 1) * col_step]
+            r1, r2 = i * row_step, (i + 1) * row_step
+            c1, c2 = j * col_step, (j + 1) * col_step
+            block = grid[r1:r2, c1:c2]
             if block.size == 0:
                 continue
-            zones[f"Zone {letters[i]}{j + 1}"] = float(block.mean())
+
+            if lat_steps is not None and lon_steps is not None:
+                mid_r = min((r1 + r2) // 2, h - 1)
+                mid_c = min((c1 + c2) // 2, w - 1)
+                lat, lon = lat_steps[mid_r], lon_steps[mid_c]
+                name = get_area_name(lat, lon)
+                if name in zones:
+                    name = f"{name} ({letters[i]}{j + 1})"
+            else:
+                name = f"Zone {letters[i]}{j + 1}"
+
+            zones[name] = float(block.mean())
     return zones
 
 
-def create_policing_chart(population, brightness, top_n=5):
+def create_policing_chart(population, brightness, lat_steps=None, lon_steps=None, top_n=5):
     """Dual bar chart: under-lit/high-population zones (policing priority)
     vs. over-illuminated/low-population zones (commercial areas)."""
     clean_pop = np.nan_to_num(population, nan=0.0)
     clean_bright = np.nan_to_num(brightness, nan=0.0)
 
-    pop_zones = _split_into_zones(clean_pop)
-    bright_zones = _split_into_zones(clean_bright)
+    pop_zones = _split_into_zones(clean_pop, lat_steps, lon_steps)
+    bright_zones = _split_into_zones(clean_bright, lat_steps, lon_steps)
 
     max_pop = max(pop_zones.values()) + 1e-9 if pop_zones else 1.0
     max_bright = max(bright_zones.values()) + 1e-9 if bright_zones else 1.0
@@ -470,10 +484,10 @@ def create_policing_chart(population, brightness, top_n=5):
     return fig.to_html(full_html=False, include_plotlyjs=False, config={'displayModeBar': False, 'responsive': True})
 
 
-def create_demand_forecast_chart(growth_score, top_n=5):
+def create_demand_forecast_chart(growth_score, lat_steps=None, lon_steps=None, top_n=5):
     """Bar chart of zones ranked by growth score -- highest = fastest-rising demand."""
     clean = np.nan_to_num(growth_score, nan=0.0)
-    zones = _split_into_zones(clean)
+    zones = _split_into_zones(clean, lat_steps, lon_steps)
     ranked = sorted(zones.items(), key=lambda x: x[1], reverse=True)[:top_n]
 
     names = [r[0] for r in reversed(ranked)]
@@ -487,14 +501,14 @@ def create_demand_forecast_chart(growth_score, top_n=5):
             colorscale=[[0.0, '#D1FAE5'], [1.0, '#10B981']],
             line=dict(color='rgba(255,255,255,0.15)', width=0.5),
         ),
-        hovertemplate="Zone: %{y}<br>Growth: %{x:.2f}<extra></extra>",
+        hovertemplate="%{y}<br>Growth: %{x:.2f}<extra></extra>",
     ))
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#64748B", family="Inter, system-ui, sans-serif", size=11),
         height=240,
-        margin=dict(l=90, r=15, t=15, b=25),
+        margin=dict(l=170, r=15, t=15, b=25),
         xaxis=dict(title="Growth score (2019 to 2024)", showgrid=True, gridcolor="rgba(148, 163, 184, 0.15)", color="#64748B"),
         yaxis=dict(showgrid=False, color="#64748B", tickfont=dict(size=10)),
         bargap=0.25,

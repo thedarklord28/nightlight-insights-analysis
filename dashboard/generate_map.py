@@ -224,7 +224,7 @@ def generate_chennai_dashboard():
     if os.path.exists(growth_path):
         growth_score = np.load(growth_path)
         growth_heatmap_html = create_growth_heatmap(growth_score, lat_steps, lon_steps)
-        demand_forecast_html = create_demand_forecast_chart(growth_score)
+        demand_forecast_html = create_demand_forecast_chart(growth_score, lat_steps, lon_steps)
     else:
         growth_heatmap_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>growth_score.npy not found. Run the pipeline first.</p>"
         demand_forecast_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>growth_score.npy not found. Run the pipeline first.</p>"
@@ -232,7 +232,7 @@ def generate_chennai_dashboard():
     # Policing priority (needs population + brightness_2024)
     if os.path.exists(population_path) and brightness_2024 is not None:
         population = np.load(population_path)
-        policing_html = create_policing_chart(population, brightness_2024)
+        policing_html = create_policing_chart(population, brightness_2024, lat_steps, lon_steps)
     else:
         policing_html = "<p style='color:#64748B;font-size:13px;padding:20px;'>population.npy / brightness_2024.npy not found. Run the pipeline first.</p>"
 
