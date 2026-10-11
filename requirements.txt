@@ -1,0 +1,8 @@
+earthengine-api
+numpy
+scipy
+plotly
+folium
+pandas
+rasterio
+geopy
