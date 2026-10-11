@@ -135,7 +135,3 @@ data/                      generated files (not committed)
 | City lookup fails | Pass `--lat` and `--lon` yourself. |
 | `DLL load failed ... Application Control policy` | Windows is blocking a compiled package. Plotly is used instead of matplotlib for this reason, and GeoTIFFs fall back to the pure-Python `tifffile` reader if rasterio is blocked. |
 | Dashboard map is blank | Needs internet for map tiles; check your connection. |
-
-## Team
-
-Add names and roles here: data pipeline, policing module, demand module, dashboard.
