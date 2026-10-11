@@ -1,0 +1,38 @@
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Python cache/build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Generated data — these are outputs, not source code, so don't commit them
+data/*.npy
+data/*.png
+data/*.tif
+data/*.tiff
+*.geojson
+
+# Earth Engine / Google credentials — never commit these
+.config/
+*credentials*
+*.json
+!requirements.json
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# OS-specific clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE folders
+.vscode/
+.idea/
+
+# Environment variables / secrets
+.env
